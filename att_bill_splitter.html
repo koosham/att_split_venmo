@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Bill Split">
+  <title>AT&T Bill Splitter</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <style>
+    :root {
+      --bg: #080c18;
+      --surface: #0f1525;
+      --surface2: #161e33;
+      --surface3: #1d2640;
+      --border: #252f4a;
+      --accent: #00b4e6;
+      --accent-dim: rgba(0,180,230,0.12);
+      --text: #dde3f4;
+      --text2: #6e7fa8;
+      --text3: #8a9fc0;
+      --success: #00d68f;
+      --danger: #f0476a;
+      --venmo: #3d95ce;
+      --venmo-dark: #2d7ab0;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+    html { height: -webkit-fill-available; }
+
+    body {
+      font-family: -apple-system, 'SF Pro Display', BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      min-height: -webkit-fill-available;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    /* ── Header ── */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      padding-top: max(16px, env(safe-area-inset-top));
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(20px);
+    }
+
+    .header-left { display: flex; align-items: center; gap: 10px; }
+
+    .logo {
+      width: 34px; height: 34px;
+      background: linear-gradient(135deg, #0098c7, #005f8a);
+      border-radius: 9px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 17px;
+      box-shadow: 0 2px 12px rgba(0,180,230,0.3);
+    }
+
+    h1 { font-size: 17px; font-weight: 700; letter-spacing: -0.4px; }
+    .subtitle { font-size: 11px; color: var(--text2); letter-spacing: 0.3px; }
+
+    .icon-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text3);
+      width: 36px; height: 36px;
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; font-size: 17px;
+      transition: all 0.15s;
+    }
+    .icon-btn:active { transform: scale(0.93); background: var(--surface3); }
+
+    /* ── Main ── */
+    .main {
+      padding: 20px;
+      max-width: 480px;
+      margin: 0 auto;
+    }
+
+    /* ── Steps ── */
+    .steps {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 22px;
+    }
+
+    .step-pill {
+      height: 4px;
+      border-radius: 2px;
+      background: var(--border);
+      flex: 1;
+      transition: all 0.4s ease;
+    }
+    .step-pill.active { background: var(--accent); }
+    .step-pill.done { background: var(--success); }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 20px;
+      margin-bottom: 14px;
+    }
+
+    .card-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: var(--text2);
+      margin-bottom: 16px;
+    }
+
+    /* ── Buttons ── */
+    .btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 16px;
+      border-radius: 13px;
+      border: none;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      letter-spacing: -0.2px;
+    }
+
+    .btn:active { transform: scale(0.97); }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #000;
+    }
+
+    .btn-secondary {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    .btn-venmo {
+      background: var(--venmo);
+      color: #fff;
+      text-decoration: none;
+    }
+
+    .btn-venmo:active { background: var(--venmo-dark); }
+
+    .btn-sm { padding: 10px 16px; font-size: 14px; border-radius: 10px; width: auto; }
+
+    .btn-row { display: flex; gap: 10px; }
+    .btn-row .btn { flex: 1; }
+
+    /* ── Divider ── */
+    .or-divider {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 14px 0;
+      color: var(--text2);
+      font-size: 12px;
+      letter-spacing: 0.5px;
+    }
+    .or-divider::before, .or-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* ── File info ── */
+    .file-info {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin-bottom: 16px;
+    }
+
+    .file-icon-wrap {
+      width: 44px; height: 44px;
+      background: rgba(0,180,230,0.1);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+      flex-shrink: 0;
+    }
+
+    .file-name { font-weight: 700; font-size: 15px; margin-bottom: 2px; }
+    .file-meta { font-size: 12px; color: var(--text2); }
+
+    /* ── Notice ── */
+    .notice {
+      background: rgba(0,180,230,0.07);
+      border: 1px solid rgba(0,180,230,0.2);
+      border-radius: 12px;
+      padding: 13px 15px;
+      font-size: 13px;
+      line-height: 1.65;
+      color: var(--text3);
+      margin-bottom: 14px;
+    }
+    .notice a { color: var(--accent); text-decoration: none; }
+    .notice strong { color: var(--text); }
+
+    /* ── Person cards ── */
+    .person-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 17px;
+      margin-bottom: 11px;
+      transition: border-color 0.2s;
+    }
+
+    .person-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+
+    .person-name { font-weight: 700; font-size: 17px; letter-spacing: -0.3px; }
+    .person-amount {
+      font-weight: 800;
+      font-size: 22px;
+      color: var(--accent);
+      letter-spacing: -0.5px;
+      line-height: 1;
+    }
+
+    .person-phones {
+      font-size: 12px;
+      color: var(--text2);
+      margin-bottom: 13px;
+      line-height: 1.5;
+    }
+
+    .phone-breakdown {
+      font-size: 12px;
+      color: var(--text2);
+      padding: 8px 10px;
+      background: var(--surface2);
+      border-radius: 8px;
+      margin-bottom: 12px;
+    }
+
+    .phone-breakdown-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 2px 0;
+    }
+
+    /* ── Summary bar ── */
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .summary-row:last-child { border-bottom: none; }
+    .summary-label { font-size: 14px; color: var(--text2); }
+    .summary-value { font-size: 15px; font-weight: 700; }
+
+    .big-total {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 16px;
+      background: var(--accent-dim);
+      border: 1px solid rgba(0,180,230,0.25);
+      border-radius: 12px;
+      margin-bottom: 16px;
+    }
+
+    .big-total-label { font-size: 13px; color: var(--text3); }
+    .big-total-amount { font-size: 28px; font-weight: 800; color: var(--accent); letter-spacing: -0.8px; }
+
+    /* ── Settings Panel ── */
+    .overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.65);
+      z-index: 200;
+      display: none;
+      backdrop-filter: blur(6px);
+    }
+    .overlay.open { display: block; }
+
+    .panel {
+      position: fixed;
+      top: 0; right: -110%;
+      width: min(420px, 100%);
+      height: 100%;
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      z-index: 201;
+      overflow-y: auto;
+      transition: right 0.32s cubic-bezier(0.4,0,0.2,1);
+      padding: 20px;
+      padding-top: max(20px, env(safe-area-inset-top));
+      padding-bottom: max(20px, env(safe-area-inset-bottom));
+    }
+    .panel.open { right: 0; }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+
+    .panel-title { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; }
+
+    .section-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text2);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin: 22px 0 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    label.field-label {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      color: var(--text2);
+      margin-bottom: 6px;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 11px;
+      color: var(--text);
+      padding: 12px 14px;
+      font-size: 15px;
+      margin-bottom: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+      -webkit-appearance: none;
+    }
+    input[type="text"]:focus { border-color: var(--accent); }
+    input[type="text"]::placeholder { color: var(--text2); }
+
+    /* ── Line rows ── */
+    .line-row {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 13px;
+      margin-bottom: 8px;
+    }
+
+    .line-row-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    .line-phone-label {
+      font-family: 'SF Mono', monospace;
+      font-size: 13px;
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .remove-line-btn {
+      background: none;
+      border: none;
+      color: var(--danger);
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+      padding: 2px 4px;
+    }
+
+    .line-inputs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .line-inputs input {
+      margin-bottom: 0;
+      padding: 9px 11px;
+      font-size: 13px;
+    }
+
+    .add-line-btn {
+      width: 100%;
+      padding: 11px;
+      background: none;
+      border: 1px dashed var(--border);
+      border-radius: 11px;
+      color: var(--text2);
+      font-size: 14px;
+      cursor: pointer;
+      margin-bottom: 22px;
+      transition: all 0.2s;
+    }
+    .add-line-btn:active { background: var(--surface2); }
+
+    /* ── Toast ── */
+    .toast {
+      position: fixed;
+      bottom: max(24px, env(safe-area-inset-bottom));
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: var(--surface3);
+      border: 1px solid var(--border);
+      border-radius: 30px;
+      padding: 10px 22px;
+      font-size: 14px;
+      font-weight: 600;
+      z-index: 400;
+      transition: transform 0.28s cubic-bezier(0.4,0,0.2,1);
+      white-space: nowrap;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); }
+
+    /* ── Spinner ── */
+    .spinner {
+      width: 18px; height: 18px;
+      border: 2px solid rgba(0,0,0,0.3);
+      border-top-color: #000;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── No venmo warning ── */
+    .no-venmo {
+      font-size: 12px;
+      color: var(--text2);
+      background: var(--surface2);
+      border-radius: 9px;
+      padding: 9px 12px;
+      text-align: center;
+    }
+
+    /* ── Utility ── */
+    .hidden { display: none !important; }
+    .mt8 { margin-top: 8px; }
+    .mt16 { margin-top: 16px; }
+  </style>
+</head>
+<body>
+
+<!-- Settings Overlay -->
+<div class="overlay" id="overlay" onclick="closeSettings()"></div>
+
+<!-- Settings Panel -->
+<div class="panel" id="panel">
+  <div class="panel-header">
+    <div class="panel-title">Settings</div>
+    <button class="icon-btn" onclick="closeSettings()">✕</button>
+  </div>
+
+  <div class="section-title">Dropbox</div>
+
+  <label class="field-label">App Key</label>
+  <input type="text" id="s_dropboxKey" placeholder="paste your dropbox app key">
+
+  <div class="notice">
+    One-time setup: <a href="https://www.dropbox.com/developers/apps" target="_blank">dropbox.com/developers/apps</a> →
+    Create app → Scoped access → Full Dropbox → copy <strong>App key</strong>.
+    Then add your GitHub Pages URL to <strong>Allowed Origins</strong>.
+  </div>
+
+  <div class="section-title">Your Account</div>
+
+  <label class="field-label">Your Phone Number (skipped in billing)</label>
+  <input type="text" id="s_myPhone" placeholder="5732028465">
+
+  <label class="field-label">Your Venmo Username</label>
+  <input type="text" id="s_myVenmo" placeholder="koosham">
+
+  <div class="section-title">Phone Line Mapping</div>
+
+  <div class="notice">
+    Add a <strong>nickname</strong> (shown in Venmo note) and <strong>Venmo username</strong> for each line you want to charge.
+    Two lines sharing the same Venmo username will be combined into one charge.
+  </div>
+
+  <div id="s_linesList"></div>
+  <button class="add-line-btn" onclick="addLine()">＋ Add phone line</button>
+
+  <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+</div>
+
+<!-- Header -->
+<div class="header">
+  <div class="header-left">
+    <div class="logo">📱</div>
+    <div>
+      <div><h1>AT&T Bill Split</h1></div>
+      <div class="subtitle">charge your people</div>
+    </div>
+  </div>
+  <button class="icon-btn" onclick="openSettings()">⚙️</button>
+</div>
+
+<!-- Main -->
+<div class="main">
+
+  <!-- Step pills -->
+  <div class="steps">
+    <div class="step-pill active" id="pill1"></div>
+    <div class="step-pill" id="pill2"></div>
+    <div class="step-pill" id="pill3"></div>
+  </div>
+
+  <!-- ── Step 1: Load ── -->
+  <div id="step1">
+    <div class="card">
+      <div class="card-label">Step 1 — Load Bill</div>
+
+      <button class="btn btn-primary" id="dbBtn" onclick="pickFromDropbox()">
+        📦 Pick from Dropbox
+      </button>
+
+      <div class="or-divider">or</div>
+
+      <label for="fileInput" style="cursor:pointer; display:block;">
+        <div class="btn btn-secondary">📂 Upload PDF from Files</div>
+      </label>
+      <input type="file" id="fileInput" accept=".pdf" style="display:none" onchange="handleFileUpload(event)">
+    </div>
+
+    <div class="notice hidden" id="noKeyNotice">
+      ⚠️ Dropbox app key not set — open ⚙️ Settings to add it, or upload the PDF from Files instead.
+    </div>
+  </div>
+
+  <!-- ── Step 2: Confirm ── -->
+  <div id="step2" class="hidden">
+    <div class="card">
+      <div class="card-label">Step 2 — Confirm &amp; Parse</div>
+
+      <div class="file-info">
+        <div class="file-icon-wrap">📄</div>
+        <div>
+          <div class="file-name" id="c_fileName">—</div>
+          <div class="file-meta" id="c_fileMeta">Ready</div>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="resetToStep1()">← Back</button>
+        <button class="btn btn-primary" id="parseBtn" onclick="parsePDF()" style="flex:2">
+          Parse Bill →
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Step 3: Results ── -->
+  <div id="step3" class="hidden">
+
+    <div class="card">
+      <div class="card-label" id="r_billLabel">April 2026 Bill</div>
+
+      <div class="big-total">
+        <div>
+          <div class="big-total-label">Total Bill</div>
+        </div>
+        <div class="big-total-amount" id="r_total">$0.00</div>
+      </div>
+
+      <div class="summary-row">
+        <span class="summary-label">Your share (<span id="r_myPhone">—</span>)</span>
+        <span class="summary-value" id="r_myAmount">$0.00</span>
+      </div>
+      <div class="summary-row">
+        <span class="summary-label">To collect from others</span>
+        <span class="summary-value" style="color:var(--success)" id="r_toCollect">$0.00</span>
+      </div>
+    </div>
+
+    <div id="r_cards"></div>
+
+    <button class="btn btn-secondary mt8" onclick="resetToStep1()">← Start Over</button>
+  </div>
+
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  // ─────────────────────────────────────────────
+  //  Config
+  // ─────────────────────────────────────────────
+
+  const DEFAULT_CONFIG = {
+    dropboxKey: '',
+    myPhone: '5732028465',
+    myVenmo: 'koosham',
+    lines: [
+      { phone: '3345245942', nickname: '', venmo: '' },
+      { phone: '4059059651', nickname: '', venmo: '' },
+      { phone: '5733089296', nickname: '', venmo: '' },
+      { phone: '5734653320', nickname: '', venmo: '' },
+      { phone: '5735783805', nickname: '', venmo: '' },
+      { phone: '5735784732', nickname: '', venmo: '' },
+      { phone: '6092162100', nickname: '', venmo: '' },
+      { phone: '6184092627', nickname: '', venmo: '' },
+    ]
+  };
+
+  function cfg() {
+    try {
+      const s = localStorage.getItem('attSplit');
+      return s ? { ...DEFAULT_CONFIG, ...JSON.parse(s) } : { ...DEFAULT_CONFIG };
+    } catch { return { ...DEFAULT_CONFIG }; }
+  }
+
+  function saveCfg(c) {
+    localStorage.setItem('attSplit', JSON.stringify(c));
+  }
+
+  // ─────────────────────────────────────────────
+  //  Settings Panel
+  // ─────────────────────────────────────────────
+
+  function openSettings() {
+    const c = cfg();
+    document.getElementById('s_dropboxKey').value = c.dropboxKey || '';
+    document.getElementById('s_myPhone').value = c.myPhone || '';
+    document.getElementById('s_myVenmo').value = c.myVenmo || '';
+    renderLines(c.lines || []);
+    document.getElementById('panel').classList.add('open');
+    document.getElementById('overlay').classList.add('open');
+  }
+
+  function closeSettings() {
+    document.getElementById('panel').classList.remove('open');
+    document.getElementById('overlay').classList.remove('open');
+  }
+
+  function renderLines(lines) {
+    document.getElementById('s_linesList').innerHTML = lines.map((l, i) => `
+      <div class="line-row">
+        <div class="line-row-top">
+          <span class="line-phone-label">${fmtPhone(l.phone)}</span>
+          <button class="remove-line-btn" onclick="removeLine(${i})">✕</button>
+        </div>
+        <div class="line-inputs">
+          <input type="text" placeholder="Nickname" value="${esc(l.nickname)}"
+            oninput="updateLineField(${i},'nickname',this.value)">
+          <input type="text" placeholder="Venmo user" value="${esc(l.venmo)}"
+            oninput="updateLineField(${i},'venmo',this.value)">
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function updateLineField(i, field, val) {
+    const c = cfg();
+    if (c.lines[i]) c.lines[i][field] = val.trim();
+    saveCfg(c);
+  }
+
+  function removeLine(i) {
+    const c = cfg();
+    c.lines.splice(i, 1);
+    saveCfg(c);
+    renderLines(c.lines);
+  }
+
+  function addLine() {
+    const c = cfg();
+    c.lines.push({ phone: '', nickname: '', venmo: '' });
+    saveCfg(c);
+    renderLines(c.lines);
+    setTimeout(() => {
+      const rows = document.querySelectorAll('.line-inputs input');
+      if (rows.length) rows[rows.length - 2].focus();
+    }, 60);
+  }
+
+  function saveSettings() {
+    const c = cfg();
+    c.dropboxKey = document.getElementById('s_dropboxKey').value.trim();
+    c.myPhone    = document.getElementById('s_myPhone').value.replace(/\D/g, '');
+    c.myVenmo    = document.getElementById('s_myVenmo').value.trim();
+    saveCfg(c);
+    closeSettings();
+    toast('✓ Settings saved');
+    if (c.dropboxKey) loadDropboxSDK(c.dropboxKey);
+  }
+
+  // ─────────────────────────────────────────────
+  //  Dropbox
+  // ─────────────────────────────────────────────
+
+  let dbxReady = false;
+
+  function loadDropboxSDK(key) {
+    const old = document.getElementById('dropboxjs');
+    if (old) old.remove();
+    dbxReady = false;
+    const s = document.createElement('script');
+    s.id = 'dropboxjs';
+    s.src = 'https://www.dropbox.com/static/api/2/dropins.js';
+    s.setAttribute('data-app-key', key);
+    s.onload = () => { dbxReady = true; };
+    document.head.appendChild(s);
+  }
+
+  function pickFromDropbox() {
+    const c = cfg();
+    if (!c.dropboxKey) {
+      document.getElementById('noKeyNotice').classList.remove('hidden');
+      return;
+    }
+    if (!dbxReady) {
+      toast('⏳ Loading Dropbox SDK…');
+      loadDropboxSDK(c.dropboxKey);
+      setTimeout(pickFromDropbox, 1800);
+      return;
+    }
+
+    Dropbox.choose({
+      linkType: 'direct',
+      multiselect: false,
+      extensions: ['.pdf'],
+      folderselect: false,
+      success: async (files) => {
+        const f = files[0];
+        toast('⬇️ Downloading…');
+        try {
+          const res = await fetch(f.link);
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          pdfBuffer = await res.arrayBuffer();
+          goStep2(f.name, f.bytes);
+        } catch(e) {
+          toast('❌ ' + e.message);
+        }
+      },
+      cancel: () => {}
+    });
+  }
+
+  // ─────────────────────────────────────────────
+  //  File Upload
+  // ─────────────────────────────────────────────
+
+  function handleFileUpload(ev) {
+    const file = ev.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      pdfBuffer = e.target.result;
+      goStep2(file.name, file.size);
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  // ─────────────────────────────────────────────
+  //  State
+  // ─────────────────────────────────────────────
+
+  let pdfBuffer = null;
+
+  // ─────────────────────────────────────────────
+  //  Step transitions
+  // ─────────────────────────────────────────────
+
+  function setPills(active) {
+    ['pill1','pill2','pill3'].forEach((id, i) => {
+      const el = document.getElementById(id);
+      el.className = 'step-pill';
+      if (i + 1 < active) el.classList.add('done');
+      else if (i + 1 === active) el.classList.add('active');
+    });
+  }
+
+  function goStep2(name, bytes) {
+    document.getElementById('c_fileName').textContent = name;
+    document.getElementById('c_fileMeta').textContent =
+      bytes ? `${(bytes/1024).toFixed(0)} KB — tap Parse to continue` : 'Ready to parse';
+    show('step2'); hide('step1'); hide('step3');
+    setPills(2);
+  }
+
+  function resetToStep1() {
+    pdfBuffer = null;
+    document.getElementById('fileInput').value = '';
+    show('step1'); hide('step2'); hide('step3');
+    setPills(1);
+  }
+
+  // ─────────────────────────────────────────────
+  //  PDF Parsing
+  // ─────────────────────────────────────────────
+
+  async function parsePDF() {
+    if (!pdfBuffer) return;
+    const btn = document.getElementById('parseBtn');
+    btn.innerHTML = '<div class="spinner" style="border-top-color:#000;border-color:rgba(0,0,0,0.25)"></div>';
+    btn.disabled = true;
+
+    try {
+      const pdf = await pdfjsLib.getDocument({ data: pdfBuffer }).promise;
+      let text = '';
+      for (let p = 1; p <= pdf.numPages; p++) {
+        const page = await pdf.getPage(p);
+        const content = await page.getTextContent();
+        text += content.items.map(i => i.str).join(' ') + ' \n';
+      }
+
+      const charges = extractCharges(text);
+      const { month, year } = extractDate(text);
+
+      if (Object.keys(charges).length === 0) {
+        toast('⚠️ Could not find any charges — check PDF format');
+        return;
+      }
+
+      renderStep3(charges, month, year);
+
+    } catch(e) {
+      toast('❌ Parse error: ' + e.message);
+    } finally {
+      btn.innerHTML = 'Parse Bill →';
+      btn.disabled = false;
+    }
+  }
+
+  function extractCharges(text) {
+    const result = {};
+    // Primary: "Total for XXX.XXX.XXXX $XX.XX"
+    const re = /Total\s+for\s+([\d]{3}[.\s][\d]{3}[.\s][\d]{4})\s+\$?([\d,]+\.[\d]{2})/g;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      const phone = m[1].replace(/[.\s]/g, '');
+      const amount = parseFloat(m[2].replace(/,/g, ''));
+      result[phone] = amount;
+    }
+    return result;
+  }
+
+  function extractDate(text) {
+    const m = text.match(/Issue\s+Date[:\s]+(\w+)\s+\d+,\s+(\d{4})/);
+    if (m) return { month: m[1], year: m[2] };
+    return { month: '', year: '' };
+  }
+
+  // ─────────────────────────────────────────────
+  //  Step 3: Render Results
+  // ─────────────────────────────────────────────
+
+  function renderStep3(charges, month, year) {
+    const c = cfg();
+    const myPhone = c.myPhone;
+
+    const total = Object.values(charges).reduce((a, b) => a + b, 0);
+    const myAmt = charges[myPhone] || 0;
+
+    // Group non-my lines by Venmo username (or by phone if no venmo set)
+    const groups = {}; // key → { venmo, phones:[{phone,nickname,amount}], total }
+
+    for (const [phone, amount] of Object.entries(charges)) {
+      if (phone === myPhone) continue;
+      const lineCfg = c.lines.find(l => l.phone.replace(/\D/g,'') === phone);
+      const nickname = lineCfg?.nickname?.trim() || fmtPhone(phone);
+      const venmo    = lineCfg?.venmo?.trim() || '';
+
+      // Group key: venmo username if set, otherwise phone (unique group per phone)
+      const key = venmo || ('phone_' + phone);
+      if (!groups[key]) {
+        groups[key] = { venmo, phones: [], total: 0 };
+      }
+      groups[key].phones.push({ phone, nickname, amount });
+      groups[key].total = +(groups[key].total + amount).toFixed(2);
+    }
+
+    // Bill header
+    const billLabel = month ? `${month} ${year} Bill` : 'Bill';
+    document.getElementById('r_billLabel').textContent = billLabel;
+    document.getElementById('r_total').textContent = '$' + total.toFixed(2);
+    document.getElementById('r_myPhone').textContent = fmtPhone(myPhone);
+    document.getElementById('r_myAmount').textContent = '$' + myAmt.toFixed(2);
+
+    const toCollect = Object.values(groups).reduce((a, g) => a + g.total, 0);
+    document.getElementById('r_toCollect').textContent = '$' + toCollect.toFixed(2);
+
+    // Render person cards
+    const container = document.getElementById('r_cards');
+    container.innerHTML = '';
+
+    for (const [key, group] of Object.entries(groups)) {
+      const multiPhone = group.phones.length > 1;
+      const displayName = group.phones.map(p => p.nickname).join(' + ');
+      const hasVenmo = !!group.venmo;
+
+      // Build Venmo note
+      const note = `AT&T ${month} Bill - ${displayName}`;
+      const venmoUrl = hasVenmo
+        ? `venmo://paycharge?txn=charge&recipients=${encodeURIComponent(group.venmo)}&amount=${group.total.toFixed(2)}&note=${encodeURIComponent(note)}&audience=private`
+        : null;
+
+      const card = document.createElement('div');
+      card.className = 'person-card';
+
+      let phoneInfo = '';
+      if (multiPhone) {
+        phoneInfo = `<div class="phone-breakdown">` +
+          group.phones.map(p =>
+            `<div class="phone-breakdown-row">
+               <span>${p.nickname} (${fmtPhone(p.phone)})</span>
+               <span>$${p.amount.toFixed(2)}</span>
+             </div>`
+          ).join('') +
+          `</div>`;
+      } else {
+        phoneInfo = `<div class="person-phones">${fmtPhone(group.phones[0].phone)}</div>`;
+      }
+
+      const actionBtn = hasVenmo
+        ? `<a href="${venmoUrl}" class="btn btn-venmo">💸 Charge $${group.total.toFixed(2)} on Venmo</a>`
+        : `<div class="no-venmo">⚠️ No Venmo username — add in ⚙️ Settings</div>`;
+
+      card.innerHTML = `
+        <div class="person-top">
+          <div class="person-name">${esc(displayName)}</div>
+          <div class="person-amount">$${group.total.toFixed(2)}</div>
+        </div>
+        ${phoneInfo}
+        ${actionBtn}
+      `;
+      container.appendChild(card);
+    }
+
+    hide('step1'); hide('step2'); show('step3');
+    setPills(3);
+  }
+
+  // ─────────────────────────────────────────────
+  //  Utilities
+  // ─────────────────────────────────────────────
+
+  function fmtPhone(p) {
+    const d = (p || '').replace(/\D/g,'');
+    return d.length === 10 ? `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6)}` : (p || '—');
+  }
+
+  function esc(s) {
+    return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function show(id) { document.getElementById(id).classList.remove('hidden'); }
+  function hide(id) { document.getElementById(id).classList.add('hidden'); }
+
+  let toastTimer;
+  function toast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
+  }
+
+  // ─────────────────────────────────────────────
+  //  Init
+  // ─────────────────────────────────────────────
+
+  (function init() {
+    const c = cfg();
+    if (c.dropboxKey) {
+      loadDropboxSDK(c.dropboxKey);
+    } else {
+      document.getElementById('noKeyNotice').classList.remove('hidden');
+    }
+  })();
+</script>
+</body>
+</html>
