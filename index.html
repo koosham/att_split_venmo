@@ -654,8 +654,18 @@
 <div class="toast" id="toast"></div>
 
 <script>
-  pdfjsLib.GlobalWorkerOptions.workerSrc =
-    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  // Load pdf.js worker as a blob URL to avoid mobile Safari cross-origin worker restrictions
+  (async function initPdfWorker() {
+    const WORKER_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    try {
+      const resp = await fetch(WORKER_URL);
+      const blob = await resp.blob();
+      pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob);
+    } catch(e) {
+      // Fallback: run in main thread (slower but works everywhere)
+      pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+    }
+  })();
 
   // ─────────────────────────────────────────────
   //  Config
@@ -928,7 +938,8 @@
       renderStep3(charges, month, year);
 
     } catch(e) {
-      toast('❌ Parse error: ' + e.message);
+      toast('❌ ' + (e.message || e.name || 'Unknown PDF error'));
+      console.error('PDF error:', e);
     } finally {
       btn.innerHTML = 'Parse Bill →';
       btn.disabled = false;
@@ -965,8 +976,8 @@
     const total = Object.values(charges).reduce((a, b) => a + b, 0);
     const myAmt = charges[myPhone] || 0;
 
-    // Group non-my lines by Venmo username (or by phone if no venmo set)
-    const groups = {}; // key → { venmo, phones:[{phone,nickname,amount}], total }
+    // One entry per phone line (no grouping — even shared Venmo accounts show separately)
+    const groups = {}; // key = phone → { venmo, nickname, phone, amount }
 
     for (const [phone, amount] of Object.entries(charges)) {
       if (phone === myPhone) continue;
@@ -974,16 +985,10 @@
       const nickname = lineCfg?.nickname?.trim() || fmtPhone(phone);
       const venmo    = lineCfg?.venmo?.trim() || '';
 
-      // Group key: venmo username if set, otherwise phone (unique group per phone)
-      // Skip lines with no venmo — treat as excluded (e.g. spouse, self)
+      // Skip lines with no venmo — treated as excluded (e.g. spouse)
       if (!venmo) continue;
 
-      const key = venmo;
-      if (!groups[key]) {
-        groups[key] = { venmo, phones: [], total: 0 };
-      }
-      groups[key].phones.push({ phone, nickname, amount });
-      groups[key].total = +(groups[key].total + amount).toFixed(2);
+      groups[phone] = { venmo, nickname, phone, amount };
     }
 
     // Bill header
@@ -993,46 +998,26 @@
     document.getElementById('r_myPhone').textContent = fmtPhone(myPhone);
     document.getElementById('r_myAmount').textContent = '$' + myAmt.toFixed(2);
 
-    const toCollect = Object.values(groups).reduce((a, g) => a + g.total, 0);
+    const toCollect = Object.values(groups).reduce((a, g) => a + g.amount, 0);
     document.getElementById('r_toCollect').textContent = '$' + toCollect.toFixed(2);
 
     // Render person cards
     const container = document.getElementById('r_cards');
     container.innerHTML = '';
 
-    for (const [key, group] of Object.entries(groups)) {
-      const multiPhone = group.phones.length > 1;
-      const displayName = group.phones.map(p => p.nickname).join(' + ');
-      // Build Venmo note
-      const note = `AT&T ${month} ${year} - ${displayName}`;
-      const venmoUrl = `venmo://paycharge?txn=charge&recipients=${encodeURIComponent(group.venmo)}&amount=${group.total.toFixed(2)}&note=${encodeURIComponent(note)}&audience=private`;
+    for (const [phone, entry] of Object.entries(groups)) {
+      const note = `AT&T ${month} ${year} - ${entry.nickname}`;
+      const venmoUrl = `venmo://paycharge?txn=charge&recipients=${encodeURIComponent(entry.venmo)}&amount=${entry.amount.toFixed(2)}&note=${encodeURIComponent(note)}&audience=private`;
 
       const card = document.createElement('div');
       card.className = 'person-card';
-
-      let phoneInfo = '';
-      if (multiPhone) {
-        phoneInfo = `<div class="phone-breakdown">` +
-          group.phones.map(p =>
-            `<div class="phone-breakdown-row">
-               <span>${p.nickname} (${fmtPhone(p.phone)})</span>
-               <span>$${p.amount.toFixed(2)}</span>
-             </div>`
-          ).join('') +
-          `</div>`;
-      } else {
-        phoneInfo = `<div class="person-phones">${fmtPhone(group.phones[0].phone)}</div>`;
-      }
-
-      const actionBtn = `<a href="${venmoUrl}" class="btn btn-venmo">💸 Charge $${group.total.toFixed(2)} on Venmo</a>`;
-
       card.innerHTML = `
         <div class="person-top">
-          <div class="person-name">${esc(displayName)}</div>
-          <div class="person-amount">$${group.total.toFixed(2)}</div>
+          <div class="person-name">${esc(entry.nickname)}</div>
+          <div class="person-amount">$${entry.amount.toFixed(2)}</div>
         </div>
-        ${phoneInfo}
-        ${actionBtn}
+        <div class="person-phones">${fmtPhone(phone)}</div>
+        <a href="${venmoUrl}" class="btn btn-venmo">💸 Charge $${entry.amount.toFixed(2)} on Venmo</a>
       `;
       container.appendChild(card);
     }
