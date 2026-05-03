@@ -655,7 +655,8 @@
 
 <script>
   // Load pdf.js worker as a blob URL to avoid mobile Safari cross-origin worker restrictions
-  (async function initPdfWorker() {
+  // Returns a promise so parsePDF can wait for it before proceeding
+  const workerReady = (async function initPdfWorker() {
     const WORKER_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     try {
       const resp = await fetch(WORKER_URL);
@@ -919,6 +920,7 @@
     btn.disabled = true;
 
     try {
+      await workerReady; // ensure worker is initialized before parsing
       const pdf = await pdfjsLib.getDocument({ data: pdfBuffer }).promise;
       let text = '';
       for (let p = 1; p <= pdf.numPages; p++) {
