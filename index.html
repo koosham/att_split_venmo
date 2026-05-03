@@ -412,6 +412,36 @@
       font-size: 13px;
     }
 
+    .line-phone-input {
+      width: 100%;
+      margin-bottom: 8px !important;
+      padding: 9px 11px !important;
+      font-family: 'SF Mono', monospace;
+      font-size: 13px !important;
+      color: var(--accent) !important;
+    }
+
+    .import-export-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .btn-outline {
+      flex: 1;
+      padding: 10px;
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 11px;
+      color: var(--text3);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.15s;
+    }
+    .btn-outline:active { background: var(--surface2); }
+
     .add-line-btn {
       width: 100%;
       padding: 11px;
@@ -505,8 +535,17 @@
   <div class="section-title">Phone Line Mapping</div>
 
   <div class="notice">
-    Add a <strong>nickname</strong> (shown in Venmo note) and <strong>Venmo username</strong> for each line you want to charge.
-    Two lines sharing the same Venmo username will be combined into one charge.
+    Enter the <strong>phone number</strong>, <strong>nickname</strong>, and <strong>Venmo username</strong> for each line.
+    Two lines with the same Venmo username are combined into one charge.
+    Leave <strong>Venmo blank</strong> to exclude someone from charging (e.g. your own lines or a spouse).
+    <br><br>
+    💡 Tip: create a <code>config.json</code> on your computer and import it below.
+  </div>
+
+  <div class="import-export-row">
+    <label for="importFile" class="btn-outline" style="cursor:pointer;">⬆️ Import JSON</label>
+    <input type="file" id="importFile" accept=".json" style="display:none" onchange="importConfig(event)">
+    <button class="btn-outline" onclick="exportConfig()">⬇️ Export JSON</button>
   </div>
 
   <div id="s_linesList"></div>
@@ -663,9 +702,11 @@
     document.getElementById('s_linesList').innerHTML = lines.map((l, i) => `
       <div class="line-row">
         <div class="line-row-top">
-          <span class="line-phone-label">${fmtPhone(l.phone)}</span>
+          <span style="font-size:11px;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:var(--text2);">Line ${i + 1}</span>
           <button class="remove-line-btn" onclick="removeLine(${i})">✕</button>
         </div>
+        <input type="text" class="line-phone-input" placeholder="Phone number (digits only)" value="${esc(l.phone)}"
+          oninput="updateLineField(${i},'phone',this.value.replace(/\D/g,''))">
         <div class="line-inputs">
           <input type="text" placeholder="Nickname" value="${esc(l.nickname)}"
             oninput="updateLineField(${i},'nickname',this.value)">
@@ -709,6 +750,51 @@
     closeSettings();
     toast('✓ Settings saved');
     if (c.dropboxKey) loadDropboxSDK(c.dropboxKey);
+  }
+
+  // ─────────────────────────────────────────────
+  //  Config Import / Export
+  // ─────────────────────────────────────────────
+
+  function exportConfig() {
+    const c = cfg();
+    // Export everything except the dropbox key (keep that local)
+    const exported = {
+      myPhone: c.myPhone,
+      myVenmo: c.myVenmo,
+      lines: c.lines
+    };
+    const blob = new Blob([JSON.stringify(exported, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'att-splitter-config.json';
+    a.click();
+    toast('✓ Config exported');
+  }
+
+  function importConfig(ev) {
+    const file = ev.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const imported = JSON.parse(e.target.result);
+        const c = cfg();
+        if (imported.myPhone !== undefined) c.myPhone = imported.myPhone;
+        if (imported.myVenmo !== undefined) c.myVenmo = imported.myVenmo;
+        if (Array.isArray(imported.lines)) c.lines = imported.lines;
+        saveCfg(c);
+        // Reload settings panel fields
+        document.getElementById('s_myPhone').value = c.myPhone || '';
+        document.getElementById('s_myVenmo').value = c.myVenmo || '';
+        renderLines(c.lines || []);
+        toast('✓ Config imported (' + (c.lines || []).length + ' lines)');
+      } catch(err) {
+        toast('❌ Invalid JSON: ' + err.message);
+      }
+      ev.target.value = '';
+    };
+    reader.readAsText(file);
   }
 
   // ─────────────────────────────────────────────
@@ -889,7 +975,10 @@
       const venmo    = lineCfg?.venmo?.trim() || '';
 
       // Group key: venmo username if set, otherwise phone (unique group per phone)
-      const key = venmo || ('phone_' + phone);
+      // Skip lines with no venmo — treat as excluded (e.g. spouse, self)
+      if (!venmo) continue;
+
+      const key = venmo;
       if (!groups[key]) {
         groups[key] = { venmo, phones: [], total: 0 };
       }
@@ -914,8 +1003,6 @@
     for (const [key, group] of Object.entries(groups)) {
       const multiPhone = group.phones.length > 1;
       const displayName = group.phones.map(p => p.nickname).join(' + ');
-      const hasVenmo = !!group.venmo;
-
       // Build Venmo note
       const note = `AT&T ${month} Bill - ${displayName}`;
       const venmoUrl = hasVenmo
@@ -939,9 +1026,7 @@
         phoneInfo = `<div class="person-phones">${fmtPhone(group.phones[0].phone)}</div>`;
       }
 
-      const actionBtn = hasVenmo
-        ? `<a href="${venmoUrl}" class="btn btn-venmo">💸 Charge $${group.total.toFixed(2)} on Venmo</a>`
-        : `<div class="no-venmo">⚠️ No Venmo username — add in ⚙️ Settings</div>`;
+      const actionBtn = `<a href="${venmoUrl}" class="btn btn-venmo">💸 Charge $${group.total.toFixed(2)} on Venmo</a>`;
 
       card.innerHTML = `
         <div class="person-top">
