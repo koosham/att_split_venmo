@@ -1004,10 +1004,8 @@
       const multiPhone = group.phones.length > 1;
       const displayName = group.phones.map(p => p.nickname).join(' + ');
       // Build Venmo note
-      const note = `AT&T ${month} Bill - ${displayName}`;
-      const venmoUrl = hasVenmo
-        ? `venmo://paycharge?txn=charge&recipients=${encodeURIComponent(group.venmo)}&amount=${group.total.toFixed(2)}&note=${encodeURIComponent(note)}&audience=private`
-        : null;
+      const note = `AT&T ${month} ${year} - ${displayName}`;
+      const venmoUrl = `venmo://paycharge?txn=charge&recipients=${encodeURIComponent(group.venmo)}&amount=${group.total.toFixed(2)}&note=${encodeURIComponent(note)}&audience=private`;
 
       const card = document.createElement('div');
       card.className = 'person-card';
