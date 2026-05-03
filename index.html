@@ -497,10 +497,10 @@
   <div class="section-title">Your Account</div>
 
   <label class="field-label">Your Phone Number (skipped in billing)</label>
-  <input type="text" id="s_myPhone" placeholder="5732028465">
+  <input type="text" id="s_myPhone" placeholder="e.g. 5551234567">
 
   <label class="field-label">Your Venmo Username</label>
-  <input type="text" id="s_myVenmo" placeholder="koosham">
+  <input type="text" id="s_myVenmo" placeholder="your-venmo-username">
 
   <div class="section-title">Phone Line Mapping</div>
 
@@ -624,18 +624,9 @@
 
   const DEFAULT_CONFIG = {
     dropboxKey: '',
-    myPhone: '5732028465',
-    myVenmo: 'koosham',
-    lines: [
-      { phone: '3345245942', nickname: '', venmo: '' },
-      { phone: '4059059651', nickname: '', venmo: '' },
-      { phone: '5733089296', nickname: '', venmo: '' },
-      { phone: '5734653320', nickname: '', venmo: '' },
-      { phone: '5735783805', nickname: '', venmo: '' },
-      { phone: '5735784732', nickname: '', venmo: '' },
-      { phone: '6092162100', nickname: '', venmo: '' },
-      { phone: '6184092627', nickname: '', venmo: '' },
-    ]
+    myPhone: '',
+    myVenmo: '',
+    lines: []
   };
 
   function cfg() {
