@@ -1,6 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Bill Split">
+  <title>AT&T Bill Splitter</title>
   <!-- Google tag (gtag.js) -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-WYG11CQRRY"></script>
   <script>
@@ -9,13 +15,6 @@
     gtag('js', new Date());
     gtag('config', 'G-WYG11CQRRY');
   </script>
-  
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="Bill Split">
-  <title>AT&T Bill Splitter</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <style>
     :root {
@@ -504,6 +503,30 @@
       text-align: center;
     }
 
+    /* ── Email button ── */
+    .btn-email {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      text-decoration: none;
+    }
+    .btn-email:active { background: var(--surface3); }
+
+    .btn-disabled {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text2);
+      opacity: 0.5;
+      cursor: default;
+      pointer-events: none;
+    }
+
+    .card-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
     /* ── Utility ── */
     .hidden { display: none !important; }
     .mt8 { margin-top: 8px; }
@@ -541,12 +564,19 @@
   <label class="field-label">Your Venmo Username</label>
   <input type="text" id="s_myVenmo" placeholder="your-venmo-username">
 
+  <label class="field-label">Email Body Template</label>
+  <input type="text" id="s_emailBody" placeholder="(leave empty for no body text)">
+  <div class="notice" style="margin-top:-8px">
+    Used in all email compose links. Subject is always <strong>AT&T Bill {Month} {Year}</strong> and is fixed.
+    Leave blank for an empty body.
+  </div>
+
   <div class="section-title">Phone Line Mapping</div>
 
   <div class="notice">
-    Enter the <strong>phone number</strong>, <strong>nickname</strong>, and <strong>Venmo username</strong> for each line.
-    Two lines with the same Venmo username are combined into one charge.
-    Leave <strong>Venmo blank</strong> to exclude someone from charging (e.g. your own lines or a spouse).
+    Enter <strong>phone</strong>, <strong>nickname</strong>, <strong>Venmo username</strong>, and optionally an <strong>email</strong> for each line.
+    Leave <strong>Venmo blank</strong> to show the card without a charge button (e.g. a spouse).
+    Lines matching your own phone are always excluded entirely.
     <br><br>
     💡 Tip: create a <code>config.json</code> on your computer and import it below.
   </div>
@@ -654,6 +684,11 @@
 
     <div id="r_cards"></div>
 
+    <a id="r_emailAll" href="#" class="btn btn-email mt8 hidden"
+       onclick="gtag('event','email_all_opened')">
+      ✉️ Email Everyone
+    </a>
+
     <button class="btn btn-secondary mt8" onclick="resetToStep1()">← Start Over</button>
   </div>
 
@@ -685,6 +720,7 @@
     dropboxKey: '',
     myPhone: '',
     myVenmo: '',
+    emailBody: '',
     lines: []
   };
 
@@ -708,6 +744,7 @@
     document.getElementById('s_dropboxKey').value = c.dropboxKey || '';
     document.getElementById('s_myPhone').value = c.myPhone || '';
     document.getElementById('s_myVenmo').value = c.myVenmo || '';
+    document.getElementById('s_emailBody').value = c.emailBody || '';
     renderLines(c.lines || []);
     document.getElementById('panel').classList.add('open');
     document.getElementById('overlay').classList.add('open');
@@ -733,6 +770,9 @@
           <input type="text" placeholder="Venmo user" value="${esc(l.venmo)}"
             oninput="updateLineField(${i},'venmo',this.value)">
         </div>
+        <input type="text" style="margin-top:8px;margin-bottom:0;padding:9px 11px;font-size:13px;"
+          placeholder="Email (optional)" value="${esc(l.email||'')}"
+          oninput="updateLineField(${i},'email',this.value.trim())">
       </div>
     `).join('');
   }
@@ -752,7 +792,7 @@
 
   function addLine() {
     const c = cfg();
-    c.lines.push({ phone: '', nickname: '', venmo: '' });
+    c.lines.push({ phone: '', nickname: '', venmo: '', email: '' });
     saveCfg(c);
     renderLines(c.lines);
     setTimeout(() => {
@@ -766,6 +806,7 @@
     c.dropboxKey = document.getElementById('s_dropboxKey').value.trim();
     c.myPhone    = document.getElementById('s_myPhone').value.replace(/\D/g, '');
     c.myVenmo    = document.getElementById('s_myVenmo').value.trim();
+    c.emailBody  = document.getElementById('s_emailBody').value.trim();
     saveCfg(c);
     closeSettings();
     toast('✓ Settings saved');
@@ -778,10 +819,11 @@
 
   function exportConfig() {
     const c = cfg();
-    // Export everything except the dropbox key (keep that local)
     const exported = {
+      dropboxKey: c.dropboxKey,
       myPhone: c.myPhone,
       myVenmo: c.myVenmo,
+      emailBody: c.emailBody || '',
       lines: c.lines
     };
     const blob = new Blob([JSON.stringify(exported, null, 2)], { type: 'application/json' });
@@ -800,14 +842,19 @@
       try {
         const imported = JSON.parse(e.target.result);
         const c = cfg();
-        if (imported.myPhone !== undefined) c.myPhone = imported.myPhone;
-        if (imported.myVenmo !== undefined) c.myVenmo = imported.myVenmo;
-        if (Array.isArray(imported.lines)) c.lines = imported.lines;
+        if (imported.dropboxKey !== undefined) c.dropboxKey = imported.dropboxKey;
+        if (imported.myPhone    !== undefined) c.myPhone    = imported.myPhone;
+        if (imported.myVenmo    !== undefined) c.myVenmo    = imported.myVenmo;
+        if (imported.emailBody  !== undefined) c.emailBody  = imported.emailBody;
+        if (Array.isArray(imported.lines))     c.lines      = imported.lines;
         saveCfg(c);
         // Reload settings panel fields
-        document.getElementById('s_myPhone').value = c.myPhone || '';
-        document.getElementById('s_myVenmo').value = c.myVenmo || '';
+        document.getElementById('s_dropboxKey').value = c.dropboxKey || '';
+        document.getElementById('s_myPhone').value    = c.myPhone    || '';
+        document.getElementById('s_myVenmo').value    = c.myVenmo    || '';
+        document.getElementById('s_emailBody').value  = c.emailBody  || '';
         renderLines(c.lines || []);
+        if (c.dropboxKey) loadDropboxSDK(c.dropboxKey);
         toast('✓ Config imported (' + (c.lines || []).length + ' lines)');
       } catch(err) {
         toast('❌ Invalid JSON: ' + err.message);
@@ -946,6 +993,7 @@
         return;
       }
 
+      gtag('event', 'bill_parsed', { lines: Object.keys(charges).length });
       renderStep3(charges, month, year);
 
     } catch(e) {
@@ -994,12 +1042,9 @@
       if (phone === myPhone) continue;
       const lineCfg = c.lines.find(l => l.phone.replace(/\D/g,'') === phone);
       const nickname = lineCfg?.nickname?.trim() || fmtPhone(phone);
-      const venmo    = lineCfg?.venmo?.trim() || '';
-
-      // Skip lines with no venmo — treated as excluded (e.g. spouse)
-      if (!venmo) continue;
-
-      groups[phone] = { venmo, nickname, phone, amount };
+      const venmo    = lineCfg?.venmo?.trim()    || '';
+      const email    = lineCfg?.email?.trim()    || '';
+      groups[phone] = { venmo, nickname, phone, amount, email };
     }
 
     // Bill header
@@ -1009,7 +1054,7 @@
     document.getElementById('r_myPhone').textContent = fmtPhone(myPhone);
     document.getElementById('r_myAmount').textContent = '$' + myAmt.toFixed(2);
 
-    const toCollect = Object.values(groups).reduce((a, g) => a + g.amount, 0);
+    const toCollect = Object.values(groups).filter(g => g.venmo).reduce((a, g) => a + g.amount, 0);
     document.getElementById('r_toCollect').textContent = '$' + toCollect.toFixed(2);
 
     // Render person cards
@@ -1017,8 +1062,19 @@
     container.innerHTML = '';
 
     for (const [phone, entry] of Object.entries(groups)) {
-      const note = `AT&T ${month} ${year} - ${entry.nickname}`;
-      const venmoUrl = `venmo://paycharge?txn=charge&recipients=${encodeURIComponent(entry.venmo)}&amount=${entry.amount.toFixed(2)}&note=${encodeURIComponent(note)}&audience=private`;
+      const subject = encodeURIComponent(`AT&T Bill ${month} ${year}`);
+      const body    = encodeURIComponent(c.emailBody || '');
+      const note    = `AT&T ${month} ${year} - ${entry.nickname}`;
+
+      const venmoBtn = entry.venmo
+        ? `<a href="venmo://paycharge?txn=charge&recipients=${encodeURIComponent(entry.venmo)}&amount=${entry.amount.toFixed(2)}&note=${encodeURIComponent(note)}&audience=private"
+              class="btn btn-venmo"
+              onclick="gtag('event','venmo_opened',{nickname:'${entry.nickname}'})">
+             💸 Charge $${entry.amount.toFixed(2)} on Venmo
+           </a>`
+        : `<div class="btn btn-disabled">💸 No Venmo — charge manually</div>`;
+
+      const emailBtn = ''; // emails handled by single 'Email Everyone' button above cards
 
       const card = document.createElement('div');
       card.className = 'person-card';
@@ -1028,9 +1084,26 @@
           <div class="person-amount">$${entry.amount.toFixed(2)}</div>
         </div>
         <div class="person-phones">${fmtPhone(phone)}</div>
-        <a href="${venmoUrl}" class="btn btn-venmo">💸 Charge $${entry.amount.toFixed(2)} on Venmo</a>
+        <div class="card-actions">
+          ${venmoBtn}
+          ${emailBtn}
+        </div>
       `;
       container.appendChild(card);
+    }
+
+    // Build "Email Everyone" mailto with all addresses in To:
+    const allEmails = Object.values(groups)
+      .map(g => g.email)
+      .filter(Boolean);
+    const emailAllBtn = document.getElementById('r_emailAll');
+    if (allEmails.length > 0) {
+      const subject = encodeURIComponent(`AT&T Bill ${month} ${year}`);
+      const body    = encodeURIComponent(c.emailBody || '');
+      emailAllBtn.href = `mailto:${allEmails.map(encodeURIComponent).join(',')}?subject=${subject}&body=${body}`;
+      emailAllBtn.classList.remove('hidden');
+    } else {
+      emailAllBtn.classList.add('hidden');
     }
 
     hide('step1'); hide('step2'); show('step3');
