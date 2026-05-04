@@ -868,30 +868,34 @@
   //  Dropbox
   // ─────────────────────────────────────────────
 
-  let dbxReady = false;
+  let dbxReadyPromise = null;
 
   function loadDropboxSDK(key) {
-    const old = document.getElementById('dropboxjs');
-    if (old) old.remove();
-    dbxReady = false;
-    const s = document.createElement('script');
-    s.id = 'dropboxjs';
-    s.src = 'https://www.dropbox.com/static/api/2/dropins.js';
-    s.setAttribute('data-app-key', key);
-    s.onload = () => { dbxReady = true; };
-    document.head.appendChild(s);
+    const existing = document.getElementById('dropboxjs');
+    if (existing) existing.remove();
+    dbxReadyPromise = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.id = 'dropboxjs';
+      s.src = 'https://www.dropbox.com/static/api/2/dropins.js';
+      s.setAttribute('data-app-key', key);
+      s.onload  = () => resolve();
+      s.onerror = () => reject(new Error('Dropbox SDK failed to load'));
+      document.head.appendChild(s);
+    });
+    return dbxReadyPromise;
   }
 
-  function pickFromDropbox() {
+  async function pickFromDropbox() {
     const c = cfg();
     if (!c.dropboxKey) {
       document.getElementById('noKeyNotice').classList.remove('hidden');
       return;
     }
-    if (!dbxReady) {
-      toast('⏳ Loading Dropbox SDK…');
-      loadDropboxSDK(c.dropboxKey);
-      setTimeout(pickFromDropbox, 1800);
+    try {
+      if (!dbxReadyPromise) dbxReadyPromise = loadDropboxSDK(c.dropboxKey);
+      await dbxReadyPromise;
+    } catch(e) {
+      toast('❌ Could not load Dropbox: ' + e.message);
       return;
     }
 
@@ -1142,7 +1146,7 @@
   (function init() {
     const c = cfg();
     if (c.dropboxKey) {
-      loadDropboxSDK(c.dropboxKey);
+      loadDropboxSDK(c.dropboxKey); // starts loading, stores promise
     } else {
       document.getElementById('noKeyNotice').classList.remove('hidden');
     }
