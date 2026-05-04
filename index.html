@@ -564,12 +564,11 @@
   <label class="field-label">Your Venmo Username</label>
   <input type="text" id="s_myVenmo" placeholder="your-venmo-username">
 
-  <label class="field-label">Email Body Template</label>
-  <input type="text" id="s_emailBody" placeholder="(leave empty for no body text)">
-  <div class="notice" style="margin-top:-8px">
-    Used in all email compose links. Subject is always <strong>AT&T Bill {Month} {Year}</strong> and is fixed.
-    Leave blank for an empty body.
-  </div>
+  <label class="field-label">Email Body</label>
+  <textarea id="s_emailBody" placeholder="Email body text" rows="4"
+    style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:11px;color:var(--text);padding:12px 14px;font-size:15px;margin-bottom:14px;outline:none;resize:vertical;font-family:inherit;transition:border-color 0.2s;-webkit-appearance:none;"
+    onfocus="this.style.borderColor='var(--accent)'"
+    onblur="this.style.borderColor='var(--border)'"></textarea>
 
   <div class="section-title">Phone Line Mapping</div>
 
@@ -771,7 +770,7 @@
             oninput="updateLineField(${i},'venmo',this.value)">
         </div>
         <input type="text" style="margin-top:8px;margin-bottom:0;padding:9px 11px;font-size:13px;"
-          placeholder="Email (optional)" value="${esc(l.email||'')}"
+          placeholder="Email" value="${esc(l.email||'')}"
           oninput="updateLineField(${i},'email',this.value.trim())">
       </div>
     `).join('');
